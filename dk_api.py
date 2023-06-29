@@ -118,3 +118,21 @@ class DigiKeyAPI:
     
 # api = DigiKeyAPI(API_KEY, CLIENT_ID, OAUTH_STATE)
 # print(api.get_product_details(input("Barcode: ")))
+
+class DigiKeyPart:
+    def __init__(self, api_value):
+        self.name = None
+        self.supplier = "Digi-Key"
+        self.dk_part_num = None
+        self.mfg_part_num = None
+        self.manufacturer = None
+        self.description = None
+        self.link = None
+        self.price_breaks = []
+        self.raw_value = api_value
+        self.parameters = []
+        self.picture = None
+        self.thumbnail = None
+    
+    def __str__(self):
+        return self.name
