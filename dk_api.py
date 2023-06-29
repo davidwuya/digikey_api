@@ -1,6 +1,5 @@
 import requests
 import webbrowser
-import time
 import re
 import os
 from dotenv import load_dotenv
@@ -13,6 +12,7 @@ DK_AUTHORIZE = "https://api.digikey.com/v1/oauth2/authorize"
 API_KEY = os.getenv("API_KEY")
 CLIENT_ID = os.getenv("CLIENT_ID")
 OAUTH_STATE = os.getenv("OAUTH_STATE")
+
 
 class DigiKeyAPI:
     def __init__(
@@ -92,7 +92,7 @@ class DigiKeyAPI:
         url = f"https://api.digikey.com/Search/v3/Products/{dk_part_number}"
         authorization = "Bearer " + oauth_token
         params = {
-            "includes": "DigiKeyPartNumber,Manufacturer,ManufacturerPartNumber,ProductDescription"
+            "includes": "DigiKeyPartNumber,Manufacturer,ManufacturerPartNumber,ProductDescription,LimitedTaxonomy,PrimaryPhoto,ProductUrl,DetailedDescription"
         }
         headers = {
             "Authorization": authorization,
@@ -109,30 +109,92 @@ class DigiKeyAPI:
         else:
             return f"Error: {response.status_code} - {response.text}"
 
-    def get_product_details(self, barcode, debug=False):
+    def get_product_details_from_barcode(self, barcode, debug=False):
         oauth_token = self.get_token(debug=debug)
         dk_part_number = self.decode_barcode(barcode)
         if debug:
             print(dk_part_number)
         return self.product_details(oauth_token, dk_part_number)
-    
-# api = DigiKeyAPI(API_KEY, CLIENT_ID, OAUTH_STATE)
-# print(api.get_product_details(input("Barcode: ")))
 
-class DigiKeyPart:
-    def __init__(self, api_value):
-        self.name = None
-        self.supplier = "Digi-Key"
-        self.dk_part_num = None
-        self.mfg_part_num = None
-        self.manufacturer = None
-        self.description = None
-        self.link = None
-        self.price_breaks = []
-        self.raw_value = api_value
-        self.parameters = []
-        self.picture = None
-        self.thumbnail = None
-    
-    def __str__(self):
-        return self.name
+    def get_product_details_from_part_number(self, part_number, debug=False):
+        oauth_token = self.get_token(debug=debug)
+        return self.product_details(oauth_token, part_number)
+
+
+class DKPart:
+    """
+    A class representing a Digi-Key part.
+
+    Attributes:
+    -----------
+    LimitedTaxonomy : list
+        A list of categories that the part belongs to.
+    ProductUrl : str
+        The URL of the product page for the part.
+    PrimaryPhoto : str
+        The URL of the primary photo for the part.
+    DetailedDescription : str
+        A detailed description of the part.
+    ManufacturerPartNumber : str
+        The manufacturer part number for the part.
+    DigiKeyPartNumber : str
+        The Digi-Key part number for the part.
+    ProductDescription : str
+        A description of the part.
+    Manufacturer : str
+        The name of the manufacturer of the part.
+    """
+
+    def __init__(self, response: dict):
+        self.LimitedTaxonomy = []
+        self.ProductUrl = ""
+        self.PrimaryPhoto = ""
+        self.DetailedDescription = ""
+        self.ManufacturerPartNumber = ""
+        self.DigiKeyPartNumber = ""
+        self.ProductDescription = ""
+        self.Manufacturer = ""
+        self.parse_response(response)
+
+    def extract_values(self, d: dict):
+        """
+        Recursively extracts relevant values from a dictionary and populates the DKPart object's attributes.
+
+        Parameters:
+        -----------
+        d : dict
+            The dictionary to extract values from.
+
+        Returns:
+        --------
+        None
+        """
+        for key, value in d.items():
+            if isinstance(value, dict):
+                self.extract_values(value)
+            elif isinstance(value, list):
+                for item in value:
+                    if isinstance(item, dict):
+                        self.extract_values(item)
+            elif key == "Value":
+                if "Categories" in d["Parameter"]:
+                    self.LimitedTaxonomy.append(value)
+                elif "Manufacturer" in d["Parameter"]:
+                    self.Manufacturer = value
+            elif key in vars(self):
+                setattr(self, key, value)
+
+    def parse_response(self, response):
+        """
+        Parses the response from the Digi-Key API and extracts the relevant values to populate the DKPart object's attributes.
+
+        Parameters:
+        -----------
+        response : dict
+            The response from the Digi-Key API.
+
+        Returns:
+        --------
+        None
+        """
+        self.extract_values(response)
