@@ -102,7 +102,7 @@ class DigiKeyAPI:
             "X-DIGIKEY-Locale-Language": "en",
             "X-DIGIKEY-Locale-Currency": "USD",
         }
-        print("Querying Digi-Key API...")
+        print("Querying Digi-Key API on Part Number: " + dk_part_number + "\n")
         response = requests.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
