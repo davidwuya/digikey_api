@@ -17,9 +17,9 @@ OAUTH_STATE = os.getenv("OAUTH_STATE")
 class DigiKeyAPI:
     def __init__(
         self,
-        api_key,
-        client_id,
-        oauth_state,
+        api_key: str,
+        client_id: str,
+        oauth_state: str,
         vercel_url="https://oauth-callback.vercel.app/api/",
         dk_authorize="https://api.digikey.com/v1/oauth2/authorize",
     ):
@@ -28,6 +28,7 @@ class DigiKeyAPI:
         self.api_key = api_key
         self.client_id = client_id
         self.oauth_state = oauth_state
+        self.token = None
         try:
             assert self.api_key and self.client_id and self.oauth_state
         except AssertionError:
@@ -66,6 +67,7 @@ class DigiKeyAPI:
         response = requests.get(
             self.vercel_url + "token", headers={"x-api-key": self.api_key}
         )
+        self.token = response.json()["access_token"]
         return response.json()["access_token"] if not debug else response.json()
 
     @staticmethod
@@ -73,7 +75,6 @@ class DigiKeyAPI:
         dk_part_number = re.search(r"\$P(.*?)\$1P", barcode)
         if dk_part_number:
             dk_part_number = dk_part_number.group(1)
-
         mfr_part_number = re.search(r"\$1P(.*?)\$KGW", barcode)
         if mfr_part_number:
             mfr_part_number = mfr_part_number.group(1)
@@ -88,9 +89,9 @@ class DigiKeyAPI:
         else:
             return None
 
-    def product_details(self, oauth_token, dk_part_number):
+    def product_details(self, token, dk_part_number):
         url = f"https://api.digikey.com/Search/v3/Products/{dk_part_number}"
-        authorization = "Bearer " + oauth_token
+        authorization = "Bearer " + token
         params = {
             "includes": "DigiKeyPartNumber,Manufacturer,ManufacturerPartNumber,ProductDescription,LimitedTaxonomy,PrimaryPhoto,ProductUrl,DetailedDescription"
         }
@@ -101,7 +102,7 @@ class DigiKeyAPI:
             "X-DIGIKEY-Locale-Language": "en",
             "X-DIGIKEY-Locale-Currency": "USD",
         }
-
+        print("Querying Digi-Key API...")
         response = requests.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
@@ -111,9 +112,14 @@ class DigiKeyAPI:
 
     def get_product_details_from_barcode(self, barcode, debug=False):
         oauth_token = self.get_token(debug=debug)
-        dk_part_number = self.decode_barcode(barcode)
-        if debug:
-            print(dk_part_number)
+        try:
+            dk_part_number = self.decode_barcode(barcode)
+            if debug:
+                print(dk_part_number)
+        except:
+            print("Error decoding barcode. Try with part number instead.")
+            return self.product_details(oauth_token, input("DK Part Number: "))
+
         return self.product_details(oauth_token, dk_part_number)
 
     def get_product_details_from_part_number(self, part_number, debug=False):
@@ -128,12 +134,12 @@ class DKPart:
     Attributes:
     -----------
     LimitedTaxonomy : list
-        A list of categories that the part belongs to.
+        A list of categories that the part belongs to. 
     ProductUrl : str
         The URL of the product page for the part.
     PrimaryPhoto : str
         The URL of the primary photo for the part.
-    DetailedDescription : str
+     : str
         A detailed description of the part.
     ManufacturerPartNumber : str
         The manufacturer part number for the part.
@@ -155,6 +161,32 @@ class DKPart:
         self.ProductDescription = ""
         self.Manufacturer = ""
         self.parse_response(response)
+
+    def prettyprint(self):
+        """
+        Prints the part's attributes in a pretty format.
+
+        Parameters:
+        -----------
+        None
+
+        Returns:
+        --------
+        None
+        """
+        print("Digi-Key Part Number:", self.DigiKeyPartNumber)
+        print("Manufacturer Part Number:", self.ManufacturerPartNumber)
+        print("Manufacturer:", self.Manufacturer)
+        print("Product Description:", self.ProductDescription)
+        print("Limited Taxonomy:", self.LimitedTaxonomy)
+        print("Detailed Description:", self.DetailedDescription)
+
+    def split_taxonomy(self):
+        # split the taxonomy into a list of categories
+        # Parent category is first in list
+        split_taxonomy = list(set(self.LimitedTaxonomy[0].split(' - ')))
+        split_taxonomy.append(self.LimitedTaxonomy[1])
+        self.LimitedTaxonomy = [split_taxonomy[-1]] + split_taxonomy[:-1][::-1]
 
     def extract_values(self, d: dict):
         """
@@ -183,6 +215,8 @@ class DKPart:
                     self.Manufacturer = value
             elif key in vars(self):
                 setattr(self, key, value)
+    
+
 
     def parse_response(self, response):
         """
@@ -198,3 +232,4 @@ class DKPart:
         None
         """
         self.extract_values(response)
+        self.split_taxonomy()
