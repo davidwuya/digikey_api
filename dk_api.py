@@ -2,6 +2,7 @@ import requests
 import webbrowser
 import re
 import os
+import urllib.parse
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -90,6 +91,7 @@ class DigiKeyAPI:
             return None
 
     def product_details(self, token, dk_part_number):
+        dk_part_number = urllib.parse.quote(dk_part_number)
         url = f"https://api.digikey.com/Search/v3/Products/{dk_part_number}"
         authorization = "Bearer " + token
         params = {
@@ -102,7 +104,9 @@ class DigiKeyAPI:
             "X-DIGIKEY-Locale-Language": "en",
             "X-DIGIKEY-Locale-Currency": "USD",
         }
+
         print("Querying Digi-Key API on Part Number: " + dk_part_number + "\n")
+        self.get_token()
         response = requests.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
@@ -134,7 +138,7 @@ class DKPart:
     Attributes:
     -----------
     LimitedTaxonomy : list
-        A list of categories that the part belongs to. 
+        A list of categories that the part belongs to.
     ProductUrl : str
         The URL of the product page for the part.
     PrimaryPhoto : str
@@ -184,7 +188,7 @@ class DKPart:
     def split_taxonomy(self):
         # split the taxonomy into a list of categories
         # Parent category is first in list
-        split_taxonomy = list(set(self.LimitedTaxonomy[0].split(' - ')))
+        split_taxonomy = list(set(self.LimitedTaxonomy[0].split(" - ")))
         split_taxonomy.append(self.LimitedTaxonomy[1])
         self.LimitedTaxonomy = [split_taxonomy[-1]] + split_taxonomy[:-1][::-1]
 
@@ -215,8 +219,6 @@ class DKPart:
                     self.Manufacturer = value
             elif key in vars(self):
                 setattr(self, key, value)
-    
-
 
     def parse_response(self, response):
         """
