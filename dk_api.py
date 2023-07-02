@@ -3,11 +3,12 @@ import webbrowser
 import re
 import os
 import urllib.parse
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# env variables
+# set env variables
 VERCEL_URL = "https://oauth-callback.vercel.app/api/"
 DK_AUTHORIZE = "https://api.digikey.com/v1/oauth2/authorize"
 API_KEY = os.getenv("API_KEY")
@@ -33,11 +34,11 @@ class DigiKeyAPI:
         try:
             assert self.api_key and self.client_id and self.oauth_state
         except AssertionError:
-            print(self.api_key, self.client_id, self.oauth_state)
-            print("Missing API Key, Client ID, or OAuth State")
+            logging.error(self.api_key, self.client_id, self.oauth_state)
+            logging.error("Missing API Key, Client ID, or OAuth State")
             exit(1)
 
-    def oauth_authorize(self, debug=False):
+    def oauth_authorize(self, debug=False)-> bool:
         redirect_uri = self.vercel_url + "callback"
         params = {
             "response_type": "code",
@@ -47,19 +48,19 @@ class DigiKeyAPI:
         }
         url = requests.Request("GET", self.dk_authorize, params=params).prepare().url
         if debug:
-            print(url)
+            logging.debug(url)
         if url:
             webbrowser.open(url)
             return True
         else:
-            return None
+            return False
 
     def verify_token(self, debug=False):
         response = requests.get(
             self.vercel_url + "verify", headers={"x-api-key": self.api_key}
         )
         if debug:
-            print(response.json())
+            logging.debug(response.json())
         return response.status_code
 
     def get_token(self, verify=False, debug=False):
@@ -105,7 +106,7 @@ class DigiKeyAPI:
             "X-DIGIKEY-Locale-Currency": "USD",
         }
 
-        print("Querying Digi-Key API on Part Number: " + dk_part_number + "\n")
+        logging.info("Querying Digi-Key API on Part Number: " + dk_part_number + "\n")
         self.get_token()
         response = requests.get(url, headers=headers, params=params)
 
@@ -119,9 +120,9 @@ class DigiKeyAPI:
         try:
             dk_part_number = self.decode_barcode(barcode)
             if debug:
-                print(dk_part_number)
+                logging.debug(dk_part_number)
         except:
-            print("Error decoding barcode. Try with part number instead.")
+            logging.error("Error decoding barcode. Try with part number instead.")
             return self.product_details(oauth_token, input("DK Part Number: "))
 
         return self.product_details(oauth_token, dk_part_number)
@@ -166,7 +167,7 @@ class DKPart:
         self.Manufacturer = ""
         self.parse_response(response)
 
-    def prettyprint(self):
+    def prettyprint(self)-> None:
         """
         Prints the part's attributes in a pretty format.
 
@@ -185,14 +186,14 @@ class DKPart:
         print("Limited Taxonomy:", self.LimitedTaxonomy)
         print("Detailed Description:", self.DetailedDescription)
 
-    def split_taxonomy(self):
+    def split_taxonomy(self)-> None:
         # split the taxonomy into a list of categories
         # Parent category is first in list
         split_taxonomy = list(set(self.LimitedTaxonomy[0].split(" - ")))
         split_taxonomy.append(self.LimitedTaxonomy[1])
         self.LimitedTaxonomy = [split_taxonomy[-1]] + split_taxonomy[:-1][::-1]
 
-    def extract_values(self, d: dict):
+    def extract_values(self, d: dict)-> None:
         """
         Recursively extracts relevant values from a dictionary and populates the DKPart object's attributes.
 
@@ -220,7 +221,7 @@ class DKPart:
             elif key in vars(self):
                 setattr(self, key, value)
 
-    def parse_response(self, response):
+    def parse_response(self, response)-> None:
         """
         Parses the response from the Digi-Key API and extracts the relevant values to populate the DKPart object's attributes.
 
