@@ -6,6 +6,7 @@ from dk_api import DigiKeyAPI, DKPart
 import requests
 import logging
 import os
+from typing import Optional
 
 
 class InvenTreeManager:
@@ -13,9 +14,10 @@ class InvenTreeManager:
         self.invapi = invapi
         self.dkapi = dkapi
 
-    def get_digikey_supplier(self) -> Company | None:
+    def get_digikey_supplier(self) -> Optional[Company]:
         suppliers = Company.list(self.invapi, is_supplier=True)
-        if suppliers and len(suppliers) == 0:
+
+        if not suppliers:
             logging.warning("No suppliers found")
             dk = Company.create(
                 self.invapi,
@@ -25,16 +27,19 @@ class InvenTreeManager:
                     "description": "Electronics Supply Store",
                 },
             )
-            print("Digi-Key supplier created")
+            logging.info("Digi-Key supplier created")
             return dk
+
         for supplier in suppliers:
             if supplier.name == "Digi-Key":
                 return supplier
+
         return None
 
     def create_manufacturer(
         self, mfg_name: str, is_supplier: bool = False
-    ) -> Company | None:
+    ) -> Optional[Company]:
+        logging.info(f"Creating manufacturer {mfg_name}")
         return Company.create(
             self.invapi,
             {
@@ -49,25 +54,32 @@ class InvenTreeManager:
         possible_manufacturers = Company.list(self.invapi, name=dkpart.Manufacturer)
         if len(possible_manufacturers) == 0:
             mfg = self.create_manufacturer(dkpart.Manufacturer)
+            logging.info(f"Manufacturer {dkpart.Manufacturer} created")
             return mfg
         else:
+            logging.info(f"Manufacturer {dkpart.Manufacturer} found")
             return possible_manufacturers[0]
 
     def upload_picture(self, dkpart: DKPart, invPart: Part):
         if dkpart.PrimaryPhoto:
-            # download the picture to a file
-            r = requests.get(dkpart.PrimaryPhoto)
-            if r.status_code != 200:
-                print("Error downloading image for %s" % invPart.name)
-                return
-            with open("temp.jpg", "wb") as f:
-                f.write(r.content)
-            # upload the picture to the part
-            if invPart.uploadImage("temp.jpg") is None:
-                print("Error uploading image for %s" % invPart.name)
-            # delete the picture
-            os.remove("temp.jpg")
-            print("Image uploaded for %s" % invPart.name)
+            try:
+                r = requests.get(dkpart.PrimaryPhoto)
+                r.raise_for_status()
+
+                with open("temp.jpg", "wb") as f:
+                    f.write(r.content)
+
+                if invPart.uploadImage("temp.jpg") is None:
+                    logging.error(f"Error uploading image for {invPart.name}")
+                else:
+                    logging.info(f"Image uploaded for {invPart.name}")
+            except requests.exceptions.HTTPError as err:
+                logging.error(
+                    f"Error downloading image for {invPart.name}. Error: {err}"
+                )
+            finally:
+                if os.path.exists("temp.jpg"):
+                    os.remove("temp.jpg")
 
     def create_inventree_part(self, dkpart: DKPart):
         category = self.get_category(dkpart)
@@ -92,10 +104,13 @@ class InvenTreeManager:
                 "assembly": False,
             },
         )
+        logging.info(f"InvenTree Part {dkpart.ProductDescription} created")
         self.upload_picture(dkpart, part)
         return part
 
-    def add_digikey_part(self, dkpart: DKPart):
+    def add_digikey_part(
+        self, dkpart: DKPart, stock_location: str, quantity: int
+    ) -> None:
         dk = self.get_digikey_supplier()
         inv_part = self.create_inventree_part(dkpart)
         if inv_part == -1:
@@ -133,16 +148,16 @@ class InvenTreeManager:
                 "part": base_pk,
                 "supplier_part": self.find_supplier_part(dkpart).pk,
                 "supplier": dk.pk,
-                "location": self.parse_locaton(input("Location: ")).pk,
-                "quantity": int(input("Quantity: ")),
+                "location": self.parse_locaton(stock_location).pk,
+                "quantity": quantity,
             },
         )
 
-        print("Part ", dkpart.ProductDescription, " created")
+        logging.info("DigiKey part ", dkpart.ProductDescription, " created")
 
         return
 
-    def parse_locaton(self, location: str) -> StockLocation | None:
+    def parse_locaton(self, location: str) -> StockLocation:
         # location is a string in the format A11A
         # A1 is the parent location
         # 1A is the child location
@@ -150,21 +165,27 @@ class InvenTreeManager:
         child = location[2:4]
         return self.get_location_from_text(parent, child)
 
-    def get_category_by_name(self, name: str) -> PartCategory | None:
-        categories = PartCategory.list(self.invapi)
-        for idx, category in enumerate(categories):
-            if category.name == name:
-                return category
-        return None
+    def get_category_by_name(self, name: str) -> Optional[PartCategory]:
+        return next(
+            (
+                category
+                for category in PartCategory.list(self.invapi)
+                if category.name == name
+            ),
+            None,
+        )
 
-    def get_category_by_id(self, pk: int) -> PartCategory | None:
-        categories = PartCategory.list(self.invapi)
-        for idx, category in enumerate(categories):
-            if category.pk == pk:
-                return category
-        return None
+    def get_category_by_id(self, pk: int) -> Optional[PartCategory]:
+        return next(
+            (
+                category
+                for category in PartCategory.list(self.invapi)
+                if category.pk == pk
+            ),
+            None,
+        )
 
-    def create_category(self, name: str, parent: int) -> PartCategory | None:
+    def create_category(self, name: str, parent: int) -> Optional[PartCategory]:
         category = PartCategory.create(
             self.invapi,
             {
@@ -172,41 +193,39 @@ class InvenTreeManager:
                 "parent": parent,  # primary key of the parent category
             },
         )
+        logging.info("Category ", name, " created")
         return category
 
     def get_category(self, part: DKPart):
         parent_pk = 1
-        for i in range(len(part.LimitedTaxonomy)):
-            category = self.get_category_by_name(part.LimitedTaxonomy[i])
+        for category_name in part.LimitedTaxonomy:
+            category = self.get_category_by_name(category_name)
             if category is None:
-                category = self.create_category(part.LimitedTaxonomy[i], parent_pk)
+                category = self.create_category(category_name, parent_pk)
             parent_pk = category.pk
         return category
 
     def get_location_from_text(self, parent_name: str, child_name: str):
-        """
-        Get a StockLocation object by its name and parent name.
-        :param child_name: The name of the stock location.
-        :param parent_name: The name of the parent stock location.
-        :return: A StockLocation object if one with the given name is found under the specified parent; otherwise None.
-        """
         all_locations = StockLocation.list(self.invapi)
-
         for location in all_locations:
             if location.name == parent_name:
                 parent_location = StockLocation(self.invapi, location.pk)
                 child_locations = parent_location.getChildLocations()
-
-                for child_location in child_locations:
-                    if child_location.name == child_name:
-                        return StockLocation(self.invapi, child_location.pk)
-
+                return next(
+                    (
+                        StockLocation(self.invapi, child.pk)
+                        for child in child_locations
+                        if child.name == child_name
+                    ),
+                    None,
+                )
         return None
 
     def get_stock_by_part(self, part: Part):
         stock = StockItem.list(self.invapi)
         for idx, item in enumerate(stock):
             if item.part == part.pk:
+                logging.info(f"Stock found for {part.name}")
                 return item
         return None
 
@@ -215,10 +234,11 @@ class InvenTreeManager:
         supplier_parts = SupplierPart.list(self.invapi)
         for idx, supplier_part in enumerate(supplier_parts):
             if supplier_part.SKU == dkpart.DigiKeyPartNumber:
+                logging.info(f"Supplier part found for {dkpart.ProductDescription}")
                 return supplier_part
         return None
 
-    def create_stock(self, dkpart: DKPart):
+    def create_stock(self, dkpart: DKPart, location: str, quantity: int):
         part = self.get_part_by_name(dkpart.ProductDescription)
         stock = StockItem.create(
             self.invapi,
@@ -226,42 +246,40 @@ class InvenTreeManager:
                 "part": part.pk,
                 "supplier_part": self.find_supplier_part(dkpart).pk,
                 "supplier": self.get_digikey_supplier().pk,
-                "location": self.parse_locaton(input("Location: ")).pk,
-                "quantity": int(input("Quantity: ")),
+                "location": self.parse_location(location).pk,
+                "quantity": quantity,
             },
+        )
+        logging.info(
+            f"Stock created for {dkpart.ProductDescription} at {location} with quantity {quantity}"
         )
         return stock
 
-    def update_stock(self, part: Part):
-        # find stockitem by part number, and then update the quantity of the stock
+    def update_stock(self, part: Part, new_quantity: int):
         stock = self.get_stock_by_part(part)
         if stock is None:
-            return self.create_stock(part)
-        else:
-            print("Present quantity: ", stock.quantity)
-            stock.quantity = int(input("New quantity: "))
-            stock.save()
-            print("Quantity updated. New quantity: ", stock.quantity)
-            return stock
+            logging.error("Stock not found for part: ", part)
+            return
 
-    def get_invpart_by_dkpart(self, dkpart: DKPart) -> Part | None:
-        print(f"Searching for {dkpart} in inventory")
+        stock.quantity = new_quantity
+        stock.save()
+        logging.info(f"Quantity updated. New quantity: {stock.quantity}")
+        return stock
+
+    def get_invpart_by_dkpart(self, dkpart: DKPart) -> Optional[Part]:
+        logging.info(f"Searching for {dkpart} in inventory")
         for part in self.parts:
             if part.dkpart == dkpart:
-                print(f"Found {dkpart} in inventory")
+                logging.info(f"Found {dkpart} in inventory")
                 return part
-        print(f"{dkpart} not found in inventory")
+        logging.info(f"{dkpart} not found in inventory")
         return None
 
-    # Check to see if part exists in inventory
-    def check_part(self, dkpart: DKPart):
-        # Look for part in inventory
+    def check_part(self, dkpart: DKPart, location: str, quantity: int):
         part = self.get_invpart_by_dkpart(dkpart)
-        # If part doesn't exist, add it
-        if part is None or len(part) == 0:
-            print("Part not found, creating")
-            return self.add_digikey_part(dkpart)
-        # If part is found, update it
+        if part is None:
+            logging.info("Part not found, creating")
+            self.add_digikey_part(dkpart)
         else:
-            print("Part found, updating")
-            return self.update_stock(dkpart)
+            logging.info("Part found, updating stock")
+            self.update_stock(part, quantity)
