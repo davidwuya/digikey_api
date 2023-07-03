@@ -5,6 +5,7 @@ import os
 import urllib.parse
 import logging
 from dotenv import load_dotenv
+from labelmaker.labelmaker import write_labels
 
 load_dotenv()
 
@@ -242,3 +243,19 @@ class DKPart:
         self.extract_values(response)
         self.split_taxonomy()
         logging.info(f"It's a {self.ProductDescription} !")
+
+    def create_label(self):
+        """
+        Creates a label for the part.
+
+        Parameters:
+        -----------
+        None
+
+        Returns:
+        --------
+        None
+        """
+        logging.info("Creating label")
+        write_labels(self.ManufacturerPartNumber, self.LimitedTaxonomy[-1],self.ProductDescription)
+        logging.info("Label created")

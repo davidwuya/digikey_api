@@ -32,7 +32,8 @@ def pangu():
     barcode = input("Scan Digi-Key Barcode: ")
     response = dkapi.get_product_details_from_barcode(barcode)
     this_part = DKPart(response)
-    manager.check_part(this_part)
+#    manager.check_part(this_part)
+    this_part.create_label()
 
 if __name__ == "__main__":
     pangu()
