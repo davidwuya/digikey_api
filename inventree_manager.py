@@ -275,7 +275,7 @@ class InvenTreeManager:
         logging.info(f"{dkpart} not found in inventory")
         return None
 
-    def check_part(self, dkpart: DKPart, location: str, quantity: int):
+    def check_part(self, dkpart: DKPart, location: str = None, quantity: int = 0):
         part = self.get_invpart_by_dkpart(dkpart)
         if part is None:
             logging.info("Part not found, creating")

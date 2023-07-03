@@ -84,6 +84,9 @@ class DigiKeyAPI:
         if mfr_part_number and mfr_part_number.startswith("1P"):
             mfr_part_number = mfr_part_number[2:]
 
+        # handles the case where the barcode itself is a Digi-Key part number
+        
+
         if type == "DK":
             return dk_part_number
         elif type == "MFR":
