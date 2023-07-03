@@ -8,6 +8,10 @@ import logging
 import os
 from typing import Optional
 
+# set logging levels
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("inventree").setLevel(logging.WARNING)
+
 
 class InvenTreeManager:
     def __init__(self, invapi: InvenTreeAPI, dkapi: DigiKeyAPI):
@@ -116,7 +120,7 @@ class InvenTreeManager:
         if inv_part == -1:
             return
         base_pk = int(inv_part.pk) if inv_part else None
-        mfg = self.find_manufacturer(dkpart)
+        mfg = self.get_manufacturer(dkpart)
 
         ManufacturerPart.create(
             self.invapi,
@@ -157,7 +161,7 @@ class InvenTreeManager:
 
         return
 
-    def parse_locaton(self, location: str) -> StockLocation:
+    def parse_locaton(self, location: str) -> Optional[StockLocation]:
         # location is a string in the format A11A
         # A1 is the parent location
         # 1A is the child location
@@ -196,8 +200,9 @@ class InvenTreeManager:
         logging.info("Category ", name, " created")
         return category
 
-    def get_category(self, part: DKPart):
+    def get_category(self, part: DKPart) -> Optional[PartCategory]:
         parent_pk = 1
+        category = None
         for category_name in part.LimitedTaxonomy:
             category = self.get_category_by_name(category_name)
             if category is None:
@@ -205,7 +210,7 @@ class InvenTreeManager:
             parent_pk = category.pk
         return category
 
-    def get_location_from_text(self, parent_name: str, child_name: str):
+    def get_location_from_text(self, parent_name: str, child_name: str)-> Optional[StockLocation]:
         all_locations = StockLocation.list(self.invapi)
         for location in all_locations:
             if location.name == parent_name:
@@ -221,7 +226,7 @@ class InvenTreeManager:
                 )
         return None
 
-    def get_stock_by_part(self, part: Part):
+    def get_stock_by_part(self, part: Part) -> Optional[StockItem]:
         stock = StockItem.list(self.invapi)
         for idx, item in enumerate(stock):
             if item.part == part.pk:
@@ -229,7 +234,7 @@ class InvenTreeManager:
                 return item
         return None
 
-    def find_supplier_part(self, dkpart: DKPart):
+    def find_supplier_part(self, dkpart: DKPart)-> Optional[SupplierPart]:
         supplier = self.get_digikey_supplier()
         supplier_parts = SupplierPart.list(self.invapi)
         for idx, supplier_part in enumerate(supplier_parts):
@@ -238,15 +243,15 @@ class InvenTreeManager:
                 return supplier_part
         return None
 
-    def create_stock(self, dkpart: DKPart, location: str, quantity: int):
-        part = self.get_part_by_name(dkpart.ProductDescription)
+    def create_stock(self, dkpart: DKPart, location: str, quantity: int)-> Optional[StockItem]:
+        part = self.get_invpart_by_dkpart(dkpart)
         stock = StockItem.create(
             self.invapi,
             {
                 "part": part.pk,
                 "supplier_part": self.find_supplier_part(dkpart).pk,
                 "supplier": self.get_digikey_supplier().pk,
-                "location": self.parse_location(location).pk,
+                "location": self.parse_locaton(location).pk,
                 "quantity": quantity,
             },
         )
@@ -255,31 +260,41 @@ class InvenTreeManager:
         )
         return stock
 
-    def update_stock(self, part: Part, new_quantity: int):
+    def update_stock(self, part: Part, new_quantity: int)-> Optional[StockItem]:
         stock = self.get_stock_by_part(part)
         if stock is None:
             logging.error("Stock not found for part: ", part)
             return
-
-        stock.quantity = new_quantity
-        stock.save()
-        logging.info(f"Quantity updated. New quantity: {stock.quantity}")
+        stock.addStock(new_quantity) if new_quantity > 0 else stock.removeStock(
+            abs(new_quantity)
+        )
+        logging.info(f"Quantity updated.")
         return stock
 
-    def get_invpart_by_dkpart(self, dkpart: DKPart) -> Optional[Part]:
-        logging.info(f"Searching for {dkpart} in inventory")
-        for part in self.parts:
-            if part.dkpart == dkpart:
-                logging.info(f"Found {dkpart} in inventory")
-                return part
-        logging.info(f"{dkpart} not found in inventory")
-        return None
+    def get_stock_quantity(self, part: Part) -> Optional[int]:
+        stock = self.get_stock_by_part(part)
+        if stock is None:
+            logging.error("Stock not found for part: ", part)
+            return
+        return int(stock.quantity)
 
-    def check_part(self, dkpart: DKPart, location: str = None, quantity: int = 0):
+    def get_invpart_by_dkpart(self, dkpart: DKPart) -> Optional[Part]:
+        logging.info(f"Searching for {dkpart.ProductDescription} in inventory")
+        parts = Part.list(self.invapi)
+        for idx, part in enumerate(parts):
+            if str(part.IPN) == str(dkpart.ManufacturerPartNumber):
+                logging.info(f"InvenTree Part found: {part.name}")
+                return part
+
+    def check_part(self, dkpart: DKPart, location: str = "", quantity: int = 0)-> Optional[Part]:
         part = self.get_invpart_by_dkpart(dkpart)
         if part is None:
             logging.info("Part not found, creating")
-            self.add_digikey_part(dkpart)
+            location = input("Enter location: ")
+            quantity = int(input("Enter quantity: "))
+            self.add_digikey_part(dkpart, location, quantity)
         else:
-            logging.info("Part found, updating stock")
+            current_qty = self.get_stock_quantity(part)
+            logging.info(f"Current stock quantity: {current_qty}")
+            quantity = int(input("Enter quantity adjustment: "))
             self.update_stock(part, quantity)

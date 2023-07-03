@@ -109,11 +109,12 @@ class DigiKeyAPI:
             "X-DIGIKEY-Locale-Currency": "USD",
         }
 
-        logging.info("Querying Digi-Key API on Part Number: " + dk_part_number + "\n")
-        self.get_token()
+        logging.info("Querying Digi-Key API on Part Number: " + dk_part_number)
+        logging.debug(self.get_token())
         response = requests.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
+            logging.info("Query successful")
             return response.json()
         else:
             return f"Error: {response.status_code} - {response.text}"
@@ -237,5 +238,7 @@ class DKPart:
         --------
         None
         """
+        logging.info("Parsing response from Digi-Key API")
         self.extract_values(response)
         self.split_taxonomy()
+        logging.info(f"It's a {self.ProductDescription} !")
