@@ -24,7 +24,6 @@ invapi = InvenTreeAPI(
 dkapi = DigiKeyAPI(API_KEY, CLIENT_ID, OAUTH_STATE)
 manager = InvenTreeManager(invapi, dkapi)
 
-
 # options
 # 1. By Barcode
 # 2. By Part Number
@@ -32,8 +31,11 @@ def pangu():
     barcode = input("Scan Digi-Key Barcode: ")
     response = dkapi.get_product_details_from_barcode(barcode)
     this_part = DKPart(response)
-#    manager.check_part(this_part)
-    this_part.create_label()
+    manager.check_part(this_part)
+    this_part.write_labels()
+
 
 if __name__ == "__main__":
-    pangu()
+    while True:
+        pangu()
+

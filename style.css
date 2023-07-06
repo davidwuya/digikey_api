@@ -1,0 +1,25 @@
+@page {
+    width: 63.5mm;
+    height: 25.4mm;
+    padding: 1mm;
+    margin: 0;
+}
+
+img {
+    height: 20mm;
+    image-rendering: pixelated;
+    vertical-align: middle;
+    display: inline-block;
+    margin-top: 2.7mm;
+    margin-bottom: 2.7mm;
+    margin-left: 2mm;
+    margin-right: 1mm;
+}
+
+.label {
+    font-family: Arial, Helvetica, sans-serif;
+    font-weight: bold;
+    font-size: 15px;
+    display: inline-block;
+    vertical-align: middle;
+}

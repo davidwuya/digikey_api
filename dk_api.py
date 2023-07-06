@@ -5,7 +5,7 @@ import os
 import urllib.parse
 import logging
 from dotenv import load_dotenv
-from labelmaker.labelmaker import write_labels
+from blabel import LabelWriter
 
 load_dotenv()
 
@@ -39,7 +39,7 @@ class DigiKeyAPI:
             logging.error("Missing API Key, Client ID, or OAuth State")
             exit(1)
 
-    def oauth_authorize(self, debug=False)-> bool:
+    def oauth_authorize(self, debug=False) -> bool:
         redirect_uri = self.vercel_url + "callback"
         params = {
             "response_type": "code",
@@ -86,7 +86,6 @@ class DigiKeyAPI:
             mfr_part_number = mfr_part_number[2:]
 
         # handles the case where the barcode itself is a Digi-Key part number
-        
 
         if type == "DK":
             return dk_part_number
@@ -172,7 +171,7 @@ class DKPart:
         self.Manufacturer = ""
         self.parse_response(response)
 
-    def prettyprint(self)-> None:
+    def prettyprint(self) -> None:
         """
         Prints the part's attributes in a pretty format.
 
@@ -191,14 +190,14 @@ class DKPart:
         print("Limited Taxonomy:", self.LimitedTaxonomy)
         print("Detailed Description:", self.DetailedDescription)
 
-    def split_taxonomy(self)-> None:
+    def split_taxonomy(self) -> None:
         # split the taxonomy into a list of categories
         # Parent category is first in list
         split_taxonomy = list(set(self.LimitedTaxonomy[0].split(" - ")))
         split_taxonomy.append(self.LimitedTaxonomy[1])
         self.LimitedTaxonomy = [split_taxonomy[-1]] + split_taxonomy[:-1][::-1]
 
-    def extract_values(self, d: dict)-> None:
+    def extract_values(self, d: dict) -> None:
         """
         Recursively extracts relevant values from a dictionary and populates the DKPart object's attributes.
 
@@ -226,7 +225,7 @@ class DKPart:
             elif key in vars(self):
                 setattr(self, key, value)
 
-    def parse_response(self, response)-> None:
+    def parse_response(self, response) -> None:
         """
         Parses the response from the Digi-Key API and extracts the relevant values to populate the DKPart object's attributes.
 
@@ -244,18 +243,51 @@ class DKPart:
         self.split_taxonomy()
         logging.info(f"It's a {self.ProductDescription} !")
 
-    def create_label(self):
-        """
-        Creates a label for the part.
-
-        Parameters:
-        -----------
-        None
-
-        Returns:
-        --------
-        None
-        """
-        logging.info("Creating label")
-        write_labels(self.ManufacturerPartNumber, self.LimitedTaxonomy[-1],self.ProductDescription)
-        logging.info("Label created")
+    def write_labels(self) -> None:
+        # find fonttools logging and disable it
+        logging.getLogger("fontTools").setLevel(logging.CRITICAL)
+        label_writer = LabelWriter("template.html", default_stylesheets=("style.css",))
+        # longest allowable string is maxlength characters
+        maxlength = 14
+        ManufacturerPartNumber = (
+            self.ManufacturerPartNumber[:maxlength]
+            if len(self.ManufacturerPartNumber) > maxlength
+            else self.ManufacturerPartNumber
+        )
+        Category = (
+            self.LimitedTaxonomy[-2][:maxlength]
+            if len(self.LimitedTaxonomy[-2]) > maxlength
+            else self.LimitedTaxonomy[-2]
+        )
+        Description1 = ""
+        Description2 = ""
+        if len(self.ProductDescription) > maxlength:
+            Description_List = self.ProductDescription.split(" ")
+            # fit as many words as possible into first line
+            for word in Description_List:
+                if len(Description1) + len(word) > maxlength:
+                    break
+                Description1 += word + " "
+            # if there are still words left, fit as many as possible into second line and store in Description2
+            for word in Description_List[len(self.ProductDescription.split(" ")) - 1 :]:
+                if len(Description2) + len(word) > maxlength:
+                    break
+                Description2 += word + " "
+        records = [
+            dict(
+                ManufacturerPartNumber=ManufacturerPartNumber,
+                Category=Category,
+                Description_Line1=Description1,
+                Description_Line2=Description2,
+            ),
+        ]
+        fname = f"{ManufacturerPartNumber}.pdf"
+        try:
+            label_writer.write_labels(records, target=fname)
+            logging.info(f"Labels written to {fname}")
+            # move to labels folder
+            os.rename(fname, os.path.join("labels", fname))
+            # open the PDF
+            os.startfile(os.path.join("labels", fname))
+        except FileExistsError:
+            pass

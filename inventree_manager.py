@@ -92,8 +92,8 @@ class InvenTreeManager:
             name=dkpart.ProductDescription,
             description=dkpart.DetailedDescription,
         )
-        if not possible_parts:
-            return None
+        # if not possible_parts:
+        #     return None
         part = Part.create(
             self.invapi,
             {
@@ -157,7 +157,7 @@ class InvenTreeManager:
             },
         )
 
-        logging.info("DigiKey part ", dkpart.ProductDescription, " created")
+        logging.info(f"DigiKey part{dkpart.ProductDescription} created")
 
         return
 
@@ -277,6 +277,22 @@ class InvenTreeManager:
             logging.error("Stock not found for part: ", part)
             return
         return int(stock.quantity)
+    
+    def get_loaction_from_pk(self, pk: int) -> Optional[StockLocation]:
+        return next(
+            (
+                location
+                for location in StockLocation.list(self.invapi)
+                if location.pk == pk
+            ),
+            None,
+        )
+    
+    def get_location_name_from_location(self, location: StockLocation) -> str:
+        parent = location.getParentLocation()
+        if parent is None:
+            return location.name
+        return parent.name + location.name
 
     def get_invpart_by_dkpart(self, dkpart: DKPart) -> Optional[Part]:
         logging.info(f"Searching for {dkpart.ProductDescription} in inventory")
@@ -285,7 +301,7 @@ class InvenTreeManager:
             if str(part.IPN) == str(dkpart.ManufacturerPartNumber):
                 logging.info(f"InvenTree Part found: {part.name}")
                 return part
-
+            
     def check_part(self, dkpart: DKPart, location: str = "", quantity: int = 0)-> Optional[Part]:
         part = self.get_invpart_by_dkpart(dkpart)
         if part is None:
@@ -296,5 +312,8 @@ class InvenTreeManager:
         else:
             current_qty = self.get_stock_quantity(part)
             logging.info(f"Current stock quantity: {current_qty}")
+            location_pk = self.get_stock_by_part(part).getLocation().pk
+            location = self.get_loaction_from_pk(location_pk)
+            logging.info(f"Current location: {self.get_location_name_from_location(location)}")
             quantity = int(input("Enter quantity adjustment: "))
             self.update_stock(part, quantity)
