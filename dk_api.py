@@ -74,25 +74,18 @@ class DigiKeyAPI:
         return response.json()["access_token"] if not debug else response.json()
 
     @staticmethod
-    def decode_barcode(barcode: str, type="DK"):
+    def decode_barcode(barcode: str) -> str:
         dk_part_number = re.search(r"\$P(.*?)\$1P", barcode)
+        mouser_part_number = re.search(r"\$1P(.*?)\$Q", barcode)
         if dk_part_number:
-            dk_part_number = dk_part_number.group(1)
-        mfr_part_number = re.search(r"\$1P(.*?)\$KGW", barcode)
-        if mfr_part_number:
-            mfr_part_number = mfr_part_number.group(1)
-
-        if mfr_part_number and mfr_part_number.startswith("1P"):
-            mfr_part_number = mfr_part_number[2:]
-
-        # handles the case where the barcode itself is a Digi-Key part number
-
-        if type == "DK":
-            return dk_part_number
-        elif type == "MFR":
-            return mfr_part_number
+            logging.info("Digi-Key Barcode Found")
+            part_number = dk_part_number.group(1)
+        elif mouser_part_number:
+            logging.info("Mouser Barcode Found")
+            part_number = mouser_part_number.group(1)
         else:
-            return None
+            part_number = ""
+        return part_number
 
     def product_details(self, token, dk_part_number):
         dk_part_number = urllib.parse.quote(dk_part_number)
@@ -121,15 +114,16 @@ class DigiKeyAPI:
 
     def get_product_details_from_barcode(self, barcode, debug=False):
         oauth_token = self.get_token(debug=debug)
-        try:
-            dk_part_number = self.decode_barcode(barcode)
-            if debug:
-                logging.debug(dk_part_number)
-        except:
-            logging.error("Error decoding barcode. Try with part number instead.")
-            return self.product_details(oauth_token, input("DK Part Number: "))
-
-        return self.product_details(oauth_token, dk_part_number)
+        if barcode.startswith("[)>06"):  # if it's a barcode
+            try:
+                logging.info("Barcode detected. Decoding...")
+                part_number = self.decode_barcode(barcode)
+                return self.product_details(oauth_token, part_number)
+            except:
+                logging.error("Error decoding barcode.")
+        else:  # if it's a part number
+            logging.info("Barcode not detected. Assuming part number.")
+            return self.product_details(oauth_token, barcode)
 
     def get_product_details_from_part_number(self, part_number, debug=False):
         oauth_token = self.get_token(debug=debug)

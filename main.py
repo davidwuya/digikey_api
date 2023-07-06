@@ -28,7 +28,7 @@ manager = InvenTreeManager(invapi, dkapi)
 # 1. By Barcode
 # 2. By Part Number
 def pangu():
-    barcode = input("Scan Digi-Key Barcode: ")
+    barcode = input("Scan Barcode or enter Part Number: ")
     response = dkapi.get_product_details_from_barcode(barcode)
     this_part = DKPart(response)
     manager.check_part(this_part)
