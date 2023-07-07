@@ -157,7 +157,7 @@ class InvenTreeManager:
             },
         )
 
-        logging.info(f"DigiKey part{dkpart.ProductDescription} created")
+        logging.info(f"Part {dkpart.ProductDescription} created successfully.")
 
         return
 
