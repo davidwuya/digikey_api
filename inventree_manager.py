@@ -309,11 +309,17 @@ class InvenTreeManager:
             location = input("Enter location: ")
             quantity = int(input("Enter quantity: "))
             self.add_digikey_part(dkpart, location, quantity)
+            logging.info("Part created successfully")
         else:
             current_qty = self.get_stock_quantity(part)
             logging.info(f"Current stock quantity: {current_qty}")
             location_pk = self.get_stock_by_part(part).getLocation().pk
             location = self.get_loaction_from_pk(location_pk)
             logging.info(f"Current location: {self.get_location_name_from_location(location)}")
-            quantity = int(input("Enter quantity adjustment: "))
+            quantity = int(input("Enter quantity adjustment, enter 0 to reprint labels: "))
+            if quantity == 0:
+                logging.info("Reprinting labels")
+                dkpart.write_labels()
+                return
             self.update_stock(part, quantity)
+            logging.info("Quantity updated successfully")
