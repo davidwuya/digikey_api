@@ -1,7 +1,6 @@
 from dk_api import DigiKeyAPI, DKPart
 from inventree_manager import InvenTreeManager
 from inventree.api import InvenTreeAPI
-from dk_api import DigiKeyAPI, DKPart
 import logging
 import os
 from dotenv import load_dotenv
