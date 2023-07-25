@@ -13,4 +13,4 @@ Several environment variables must be set.
 * `INVENTREE_PASSWORD`: InvenTree password.
 
 ## Usage
-To run the program, execute the `main.py`` script, then follow the prompts to scan barcodes and manage the parts in your inventory.
+To run the program, execute the ``main.py`` script, then follow the prompts to scan barcodes and manage the parts in your inventory.
