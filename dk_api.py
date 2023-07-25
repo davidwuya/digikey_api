@@ -284,4 +284,5 @@ class DKPart:
             # open the PDF
             os.startfile(os.path.join("labels", fname))
         except FileExistsError:
+            logging.error(f"File {fname} already exists.")
             pass
