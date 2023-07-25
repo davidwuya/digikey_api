@@ -7,7 +7,6 @@ import os
 from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
-
 # Create API objects
 load_dotenv()
 VERCEL_URL = "https://oauth-callback.vercel.app/api/"

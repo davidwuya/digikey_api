@@ -133,6 +133,7 @@ class InvenTreeManager:
                 "link": dkpart.ProductUrl,
             },
         )
+        logging.info(f"Manufacturer Part {dkpart.ManufacturerPartNumber} created")
 
         SupplierPart.create(
             self.invapi,
@@ -145,6 +146,7 @@ class InvenTreeManager:
                 "link": dkpart.ProductUrl,
             },
         )
+        logging.info(f"Supplier Part {dkpart.DigiKeyPartNumber} created")
 
         StockItem.create(
             self.invapi,
@@ -156,6 +158,7 @@ class InvenTreeManager:
                 "quantity": quantity,
             },
         )
+        logging.info(f"Stock created for {dkpart.ProductDescription}")
 
         logging.info(f"Part {dkpart.ProductDescription} created successfully.")
 
@@ -263,7 +266,7 @@ class InvenTreeManager:
     def update_stock(self, part: Part, new_quantity: int)-> Optional[StockItem]:
         stock = self.get_stock_by_part(part)
         if stock is None:
-            logging.error("Stock not found for part: ", part)
+            logging.error("Stock not found for this part: ")
             return
         stock.addStock(new_quantity) if new_quantity > 0 else stock.removeStock(
             abs(new_quantity)
@@ -274,7 +277,7 @@ class InvenTreeManager:
     def get_stock_quantity(self, part: Part) -> Optional[int]:
         stock = self.get_stock_by_part(part)
         if stock is None:
-            logging.error("Stock not found for part: ", part)
+            logging.error("Stock not found for this part: ")
             return
         return int(stock.quantity)
     
@@ -313,13 +316,20 @@ class InvenTreeManager:
         else:
             current_qty = self.get_stock_quantity(part)
             logging.info(f"Current stock quantity: {current_qty}")
-            location_pk = self.get_stock_by_part(part).getLocation().pk
-            location = self.get_loaction_from_pk(location_pk)
-            logging.info(f"Current location: {self.get_location_name_from_location(location)}")
-            quantity = int(input("Enter quantity adjustment, enter 0 to reprint labels: "))
-            if quantity == 0:
-                logging.info("Reprinting labels")
-                dkpart.write_labels()
-                return
-            self.update_stock(part, quantity)
-            logging.info("Quantity updated successfully")
+            try:
+                location_pk = self.get_stock_by_part(part).getLocation().pk
+                location = self.get_loaction_from_pk(location_pk)
+                logging.info(f"Current location: {self.get_location_name_from_location(location)}")
+                quantity = int(input("Enter quantity adjustment, enter 0 to reprint labels: "))
+                if quantity == 0:
+                    logging.info("Reprinting labels")
+                    dkpart.write_labels()
+                    return
+                self.update_stock(part, quantity)
+                logging.info("Quantity updated successfully")
+            except AttributeError:
+                # stock item does not exist, create it
+                logging.info("Stock item not found, creating")
+                location = input("Enter location: ")
+                quantity = int(input("Enter quantity: "))
+                self.create_stock(dkpart, location, quantity)
