@@ -327,9 +327,10 @@ class InvenTreeManager:
                     return
                 self.update_stock(part, quantity)
                 logging.info("Quantity updated successfully")
-            except AttributeError:
-                # stock item does not exist, create it
-                logging.info("Stock item not found, creating")
-                location = input("Enter location: ")
-                quantity = int(input("Enter quantity: "))
-                self.create_stock(dkpart, location, quantity)
+            except:
+                if self.get_stock_quantity(part) == None:
+                    # stock item does not exist, create it
+                    logging.info("Stock item not found, creating")
+                    location = input("Enter location: ")
+                    quantity = int(input("Enter quantity: "))
+                    self.create_stock(dkpart, location, quantity)
